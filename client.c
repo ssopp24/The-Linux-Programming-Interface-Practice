@@ -1,76 +1,49 @@
-#include <string.h>
-#include <stdio.h>
-#include <sys/un.h>
 #include <sys/socket.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/un.h>
 #include <unistd.h>
-#include <errno.h>
+#include <stdlib.h>
 
-
-#define SV_SOCK1_PATH "/tmp/socket1"
-#define SV_SOCK2_PATH "/tmp/socket2"
-#define SV_SOCK3_PATH "/tmp/socket3"
+#define BUF_SIZE 100
 
 int main(void)
 {
-    int sfd2, sfd3;
-    struct sockaddr_un addr2, addr3, sendAddr;
-    socklen_t len;
+    int sfd;
+    ssize_t numRead;
+    char buf[BUF_SIZE];
+    struct sockaddr_un addr;
 
-    sfd2 = socket(AF_UNIX, SOCK_DGRAM, 0);
-    if (-1 == sfd2)
+    sfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (-1 == sfd)
     {
-        perror("socket: ");
-        return -1;
+        perror("socket error");
+        exit(EXIT_FAILURE);
     }
+    memset(&addr, 0, sizeof(struct sockaddr_un));
+    addr.sun_family = AF_UNIX;
+    strncpy(&addr.sun_path[1], "xyz", sizeof(addr.sun_path) - 2);
 
-    if (-1 == remove(SV_SOCK2_PATH) && ENOENT != errno)
+    if (-1 == connect(sfd, (struct sockaddr *)&addr, sizeof(struct sockaddr_un)))
     {
-        perror("remove: ");
-        return -1;
+        perror("connect error");
+        exit(EXIT_FAILURE);
     }
-    if (-1 == remove(SV_SOCK3_PATH) && ENOENT != errno)
+
+    while (numRead = read(STDIN_FILENO, buf, BUF_SIZE))
     {
-        perror("remove: ");
-        return -1;
+        if (numRead != write(sfd, buf, numRead))
+        {
+            perror("write error");
+            exit(EXIT_FAILURE);
+        }
     }
-
-    memset(&addr2, 0, sizeof(struct sockaddr_un));
-    addr2.sun_family = AF_UNIX;
-    strncpy(addr2.sun_path, SV_SOCK2_PATH, sizeof(addr2.sun_path) - 1);
-    if (-1 == bind(sfd2, (struct sockaddr *)&addr2, sizeof(struct sockaddr_un)))
+    
+    if (-1 == numRead)
     {
-        perror("bind: ");
-        return -1;
+        perror("read error");
+        exit(EXIT_FAILURE);
     }
 
-    sfd3 = socket(AF_UNIX, SOCK_DGRAM, 0);
-    if (-1 == sfd3)
-    {
-        perror("socket: ");
-        return -1;
-    }
-
-    memset(&addr3, 0, sizeof(struct sockaddr_un));
-    addr3.sun_family = AF_UNIX;
-    strncpy(addr3.sun_path, SV_SOCK3_PATH, sizeof(addr3.sun_path) - 1);
-    if (-1 == bind(sfd3, (struct sockaddr *)&addr3, sizeof(struct sockaddr_un)))
-    {
-        perror("bind: ");
-        return -1;
-    }
-
-    len = sizeof(struct sockaddr_un);
-    memset(&sendAddr, 0, sizeof(struct sockaddr_un));
-    sendAddr.sun_family = AF_UNIX;
-    strncpy(sendAddr.sun_path, SV_SOCK1_PATH, sizeof(sendAddr.sun_path) - 1);
-    if (-1 == sendto(sfd2, "abc", 3, 0, (struct sockaddr *)&sendAddr, len)){
-        perror("sendto: ");
-    }
-
-    if (-1 == sendto(sfd3, "123", 3, 0, (struct sockaddr *)&sendAddr, len))
-    {
-        perror("sendto: ");
-    }
-
-    return 0;
+    exit(EXIT_SUCCESS);
 }
